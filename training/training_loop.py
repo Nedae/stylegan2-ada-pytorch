@@ -87,6 +87,7 @@ def save_image_grid(img, fname, drange, grid_size):
 
 def training_loop(
     run_dir                 = '.',      # Output directory.
+    wandb_logger            = None,
     training_set_kwargs     = {},       # Options for training set.
     data_loader_kwargs      = {},       # Options for torch.utils.data.DataLoader.
     G_kwargs                = {},       # Options for generator network.
@@ -376,6 +377,7 @@ def training_loop(
                 if rank == 0:
                     metric_main.report_metric(result_dict, run_dir=run_dir, snapshot_pkl=snapshot_pkl)
                 stats_metrics.update(result_dict.results)
+
         del snapshot_data # conserve memory
 
         # Collect statistics.
@@ -410,6 +412,14 @@ def training_loop(
         tick_start_nimg = cur_nimg
         tick_start_time = time.time()
         maintenance_time = tick_start_time - tick_end_time
+        
+        if wandb_logger is not None:
+            log_items = {
+                "tick": cur_tick,
+                "FID": stats_metrics["fid50k_full"],
+            }
+            wandb_logger.log(log_items)
+            wandb_logger.sync()       
         if done:
             break
 

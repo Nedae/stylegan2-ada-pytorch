@@ -22,6 +22,16 @@ from metrics import metric_main
 from torch_utils import training_stats
 from torch_utils import custom_ops
 
+from mc_logger import Logger
+
+
+
+proj_args = {
+            "project_name": "synthetic_faces",
+            "entity": "team-quentin",
+            "bucket_path": "gs://paravision-ml-sandbox/neda/wandb",
+        }
+    
 #----------------------------------------------------------------------------
 
 class UserError(Exception):
@@ -360,7 +370,7 @@ def setup_training_loop_kwargs(
 
 #----------------------------------------------------------------------------
 
-def subprocess_fn(rank, args, temp_dir):
+def subprocess_fn(rank, args, temp_dir, wandb_logger):
     dnnlib.util.Logger(file_name=os.path.join(args.run_dir, 'log.txt'), file_mode='a', should_flush=True)
 
     # Init torch.distributed.
@@ -380,7 +390,7 @@ def subprocess_fn(rank, args, temp_dir):
         custom_ops.verbosity = 'none'
 
     # Execute training loop.
-    training_loop.training_loop(rank=rank, **args)
+    training_loop.training_loop(rank=rank, wandb_logger = wandb_logger,**args)
 
 #----------------------------------------------------------------------------
 
@@ -394,7 +404,6 @@ class CommaSeparatedList(click.ParamType):
         return value.split(',')
 
 #----------------------------------------------------------------------------
-
 @click.command()
 @click.pass_context
 
@@ -434,6 +443,7 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--nobench', help='Disable cuDNN benchmarking', type=bool, metavar='BOOL')
 @click.option('--allow-tf32', help='Allow PyTorch to use TF32 internally', type=bool, metavar='BOOL')
 @click.option('--workers', help='Override number of DataLoader workers', type=int, metavar='INT')
+
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
@@ -523,14 +533,27 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     with open(os.path.join(args.run_dir, 'training_options.json'), 'wt') as f:
         json.dump(args, f, indent=2)
 
+    local_log_dir = os.path.join(args.run_dir, "wandb/test1")
+    os.makedirs(local_log_dir, exist_ok=True)
+    wandb_logger = Logger(
+        proj_args["project_name"],
+        proj_args["entity"],
+        proj_args["bucket_path"],
+        local_log_dir,
+        "test1",  # unique id to identify the experiment
+        args,
+    )
     # Launch processes.
     print('Launching processes...')
-    torch.multiprocessing.set_start_method('spawn')
+    try:
+        torch.multiprocessing.set_start_method('spawn')
+    except RuntimeError:
+        pass
     with tempfile.TemporaryDirectory() as temp_dir:
         if args.num_gpus == 1:
-            subprocess_fn(rank=0, args=args, temp_dir=temp_dir)
+            subprocess_fn(rank=0, args=args, temp_dir=temp_dir, wandb_logger = wandb_logger)
         else:
-            torch.multiprocessing.spawn(fn=subprocess_fn, args=(args, temp_dir), nprocs=args.num_gpus)
+            torch.multiprocessing.spawn(fn=subprocess_fn, args=(args, temp_dir, wandb_logger), nprocs=args.num_gpus)
 
 #----------------------------------------------------------------------------
 

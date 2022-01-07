@@ -26,9 +26,10 @@ set -e
 
 rest=$@
 
-IMAGE="${IMAGE:-sg2ada:latest}"
+IMAGE="${IMAGE:-sg2ada:latest_wandb}"
 
 CONTAINER_ID=$(docker inspect --format="{{.Id}}" ${IMAGE} 2> /dev/null)
+
 if [[ "${CONTAINER_ID}" ]]; then
     docker run --shm-size=2g --gpus all -it --rm -v `pwd`:/scratch --user $(id -u):$(id -g) \
         --workdir=/scratch -e HOME=/scratch $IMAGE $@
