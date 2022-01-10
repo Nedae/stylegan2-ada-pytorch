@@ -41,6 +41,7 @@ class UserError(Exception):
 
 def setup_training_loop_kwargs(
     # General options (not included in desc).
+    wandb_group_name = None, # Name of the group of subprocesses in wandb
     gpus       = None, # Number of GPUs: <int>, default = 1 gpu
     snap       = None, # Snapshot interval: <int>, default = 50 ticks
     metrics    = None, # List of metric names: [], ['fid50k_full'] (default), ...
@@ -74,6 +75,7 @@ def setup_training_loop_kwargs(
     allow_tf32 = None, # Allow PyTorch to use TF32 for matmul and convolutions: <bool>, default = False
     nobench    = None, # Disable cuDNN benchmarking: <bool>, default = False
     workers    = None, # Override number of DataLoader workers: <int>, default = 3
+    
 ):
     args = dnnlib.EasyDict()
 
@@ -81,6 +83,7 @@ def setup_training_loop_kwargs(
     # General options: gpus, snap, metrics, seed
     # ------------------------------------------
 
+    args.wandb_group_name = wandb_group_name
     if gpus is None:
         gpus = 1
     assert isinstance(gpus, int)
@@ -389,14 +392,14 @@ def subprocess_fn(rank, args, temp_dir):
     if rank != 0:
         custom_ops.verbosity = 'none'
 
-    local_log_dir = os.path.join(args.run_dir, "wandb/test_grouping4")
+    local_log_dir = os.path.join(args.run_dir, "wandb/{}".format(args.wandb_group_name))
     os.makedirs(local_log_dir, exist_ok=True)
     wandb_logger = Logger(
         proj_args["project_name"],
         proj_args["entity"],
         proj_args["bucket_path"],
         local_log_dir,
-        "test_grouping4",  # unique id to identify the group
+        args.wandb_group_name,  # unique id to identify the group
         args,
     )
     # Execute training loop.
@@ -419,6 +422,7 @@ class CommaSeparatedList(click.ParamType):
 
 # General options.
 @click.option('--outdir', help='Where to save the results', required=True, metavar='DIR')
+@click.option('--wandb_group_name', help='name of the wandb group', required=True, metavar='STR')
 @click.option('--gpus', help='Number of GPUs to use [default: 1]', type=int, metavar='INT')
 @click.option('--snap', help='Snapshot interval [default: 50 ticks]', type=int, metavar='INT')
 @click.option('--metrics', help='Comma-separated list or "none" [default: fid50k_full]', type=CommaSeparatedList())
@@ -453,7 +457,6 @@ class CommaSeparatedList(click.ParamType):
 @click.option('--nobench', help='Disable cuDNN benchmarking', type=bool, metavar='BOOL')
 @click.option('--allow-tf32', help='Allow PyTorch to use TF32 internally', type=bool, metavar='BOOL')
 @click.option('--workers', help='Override number of DataLoader workers', type=int, metavar='INT')
-
 
 def main(ctx, outdir, dry_run, **config_kwargs):
     """Train a GAN using the techniques described in the paper
