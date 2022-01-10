@@ -177,7 +177,6 @@ def training_loop(
         augment_pipe.p.copy_(torch.as_tensor(augment_p))
         if ada_target is not None:
             ada_stats = training_stats.Collector(regex='Loss/signs/real')
-
     # Distribute across GPUs.
     if rank == 0:
         print(f'Distributing across {num_gpus} GPUs...')
@@ -376,6 +375,12 @@ def training_loop(
                     dataset_kwargs=training_set_kwargs, num_gpus=num_gpus, rank=rank, device=device)
                 if rank == 0:
                     metric_main.report_metric(result_dict, run_dir=run_dir, snapshot_pkl=snapshot_pkl)
+                if wandb_logger is not None:
+                    log_items = {
+                        "FID": result_dict["results"]["fid50k_full"],
+                    }
+                    wandb_logger.log(log_items)
+
                 stats_metrics.update(result_dict.results)
 
         del snapshot_data # conserve memory
@@ -388,7 +393,17 @@ def training_loop(
                 value = phase.start_event.elapsed_time(phase.end_event)
             training_stats.report0('Timing/' + phase.name, value)
         stats_collector.update()
+        if wandb_logger is not None:
+            log_items = {
+                "Generator Loss": stats_collector.mean("Loss/G/loss"),
+                "Discriminator Loss": stats_collector.mean("Loss/D/loss"),
+                "Generator reg Loss":stats_collector.mean("Loss/G/reg"),
+                "Discriminator reg Loss":stats_collector.mean("Loss/D/reg"),
+            }
+            wandb_logger.log(log_items)
+
         stats_dict = stats_collector.as_dict()
+
 
         # Update logs.
         timestamp = time.time()
@@ -413,13 +428,6 @@ def training_loop(
         tick_start_time = time.time()
         maintenance_time = tick_start_time - tick_end_time
         
-        if wandb_logger is not None:
-            log_items = {
-                "tick": cur_tick,
-                "FID": stats_metrics["fid50k_full"],
-            }
-            wandb_logger.log(log_items)
-            wandb_logger.sync()       
         if done:
             break
 

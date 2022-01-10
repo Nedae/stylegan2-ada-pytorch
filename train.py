@@ -370,7 +370,7 @@ def setup_training_loop_kwargs(
 
 #----------------------------------------------------------------------------
 
-def subprocess_fn(rank, args, temp_dir, wandb_logger):
+def subprocess_fn(rank, args, temp_dir):
     dnnlib.util.Logger(file_name=os.path.join(args.run_dir, 'log.txt'), file_mode='a', should_flush=True)
 
     # Init torch.distributed.
@@ -389,6 +389,16 @@ def subprocess_fn(rank, args, temp_dir, wandb_logger):
     if rank != 0:
         custom_ops.verbosity = 'none'
 
+    local_log_dir = os.path.join(args.run_dir, "wandb/test_grouping4")
+    os.makedirs(local_log_dir, exist_ok=True)
+    wandb_logger = Logger(
+        proj_args["project_name"],
+        proj_args["entity"],
+        proj_args["bucket_path"],
+        local_log_dir,
+        "test_grouping4",  # unique id to identify the group
+        args,
+    )
     # Execute training loop.
     training_loop.training_loop(rank=rank, wandb_logger = wandb_logger,**args)
 
@@ -533,16 +543,7 @@ def main(ctx, outdir, dry_run, **config_kwargs):
     with open(os.path.join(args.run_dir, 'training_options.json'), 'wt') as f:
         json.dump(args, f, indent=2)
 
-    local_log_dir = os.path.join(args.run_dir, "wandb/test1")
-    os.makedirs(local_log_dir, exist_ok=True)
-    wandb_logger = Logger(
-        proj_args["project_name"],
-        proj_args["entity"],
-        proj_args["bucket_path"],
-        local_log_dir,
-        "test1",  # unique id to identify the experiment
-        args,
-    )
+    
     # Launch processes.
     print('Launching processes...')
     try:
@@ -551,9 +552,11 @@ def main(ctx, outdir, dry_run, **config_kwargs):
         pass
     with tempfile.TemporaryDirectory() as temp_dir:
         if args.num_gpus == 1:
-            subprocess_fn(rank=0, args=args, temp_dir=temp_dir, wandb_logger = wandb_logger)
+            subprocess_fn(rank=0, args=args, temp_dir=temp_dir)
         else:
-            torch.multiprocessing.spawn(fn=subprocess_fn, args=(args, temp_dir, wandb_logger), nprocs=args.num_gpus)
+            torch.multiprocessing.spawn(fn=subprocess_fn, args=(args, temp_dir), nprocs=args.num_gpus)        
+    wandb.finish()
+
 
 #----------------------------------------------------------------------------
 
