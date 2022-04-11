@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Do not upload git patch or .py files on W&B server
 os.environ["WANDB_IGNORE_GLOBS"] = "*.patch,*.py,*/*.py,*/*/*.py"
-wandb.login(key="78ac4f3117cc874807a7e334d35512dfcd196d0e")
+wandb.login(key="%%%")
 
 class classproperty(object):
     """ Helper to get a class property decorator."""
